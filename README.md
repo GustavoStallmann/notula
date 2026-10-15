@@ -21,6 +21,12 @@ audio and microphone, transcribe with **speaker diarization**, and generate
 **key points, decisions, action items and a summary** — everything linked to its
 recording and stored locally.
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/record.png" width="800" alt="Notula recording tab with big record button" />
+</p>
+
 ## Features
 
 - 🎙️ **Record** system audio, microphone, or both mixed (16 kHz mono WAV)

@@ -28,9 +28,6 @@ export default function App() {
             <img src="/notula.svg" alt="Notula" className="h-8 w-8 rounded-lg" />
             <div className="leading-tight">
               <p className="text-sm font-semibold tracking-tight">Notula</p>
-              <p className="hidden text-xs text-muted-foreground sm:block">
-                {t("app.subtitle")}
-              </p>
             </div>
           </div>
           <div className="flex items-center gap-1">
