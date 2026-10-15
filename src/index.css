@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 9%;
+    --radius: 0.625rem;
+  }
+
+  .dark {
+    --background: 0 0% 9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 13%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 13%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 17%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 17%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 17%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 50.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 22%;
+    --input: 0 0% 22%;
+    --ring: 0 0% 83.1%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Recording pulse dot */
+@keyframes rec-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.85); }
+}
+.rec-dot-live {
+  animation: rec-pulse 1.2s ease-in-out infinite;
+}
+
+/* Rendered meeting-notes markdown */
+.prose-notes h3 {
+  @apply mt-5 mb-2 text-base font-semibold tracking-tight first:mt-0;
+}
+.prose-notes h4 {
+  @apply mt-4 mb-1.5 text-sm font-semibold;
+}
+.prose-notes p {
+  @apply my-2 text-sm leading-6 text-muted-foreground;
+}
+.prose-notes ul {
+  @apply my-2 space-y-1.5 pl-1;
+}
+.prose-notes li {
+  @apply relative pl-5 text-sm leading-6;
+}
+.prose-notes li::before {
+  content: "";
+  @apply absolute left-1 top-[0.65em] h-1.5 w-1.5 rounded-full bg-primary/60;
+}
+.prose-notes code {
+  @apply rounded bg-muted px-1.5 py-0.5 font-mono text-[13px];
+}
+.prose-notes strong {
+  @apply font-semibold text-foreground;
+}
