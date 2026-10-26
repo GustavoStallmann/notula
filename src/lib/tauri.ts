@@ -83,6 +83,8 @@ export interface SummarizeResult {
   model: string;
 }
 
+export type SummaryKind = "meeting" | "class";
+
 export const api = {
   platform: () => invoke<string>("get_platform"),
   listSources: () => invoke<AudioSource[]>("list_audio_sources"),
@@ -111,6 +113,8 @@ export const api = {
     apiToken: string;
     model: string;
     language?: string;
+    trimSilence?: boolean;
+    speed?: number;
   }) =>
     invoke<TranscribeResult>("transcribe_audio", {
       filePath: p.filePath,
@@ -118,6 +122,8 @@ export const api = {
       apiToken: p.apiToken,
       model: p.model,
       language: p.language || null,
+      trimSilence: p.trimSilence ?? false,
+      speed: p.speed ?? 1,
     }),
   summarize: (p: {
     transcript: string;
@@ -126,6 +132,7 @@ export const api = {
     model: string;
     language: string;
     filePath?: string | null;
+    kind?: SummaryKind;
   }) =>
     invoke<SummarizeResult>("summarize_transcript", {
       transcript: p.transcript,
@@ -134,6 +141,7 @@ export const api = {
       model: p.model,
       language: p.language,
       filePath: p.filePath || null,
+      kind: p.kind ?? "meeting",
     }),
 };
 

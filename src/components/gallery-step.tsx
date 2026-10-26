@@ -18,8 +18,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SttModelSelect } from "@/components/stt-model-select";
 import { AudioPlayer } from "@/components/audio-player";
-import { api, displayStem, formatBytes, whisperLang, type RecordingFile } from "@/lib/tauri";
+import { api, displayStem, formatBytes, whisperLang, type RecordingFile, type SummaryKind } from "@/lib/tauri";
 import { renderMarkdown } from "@/lib/markdown";
 import { useLang } from "@/lib/i18n";
 import type { CloudSettings } from "@/lib/settings";
@@ -38,6 +39,9 @@ export default function GalleryStep({ settings, initialOpenPath }: GalleryProps)
   const [loading, setLoading] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
+  const [sttModel, setSttModel] = useState(settings.sttModel);
+  useEffect(() => setSttModel(settings.sttModel), [settings.sttModel]);
+  const [summaryKind, setSummaryKind] = useState<SummaryKind>("meeting");
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
 
@@ -119,14 +123,18 @@ export default function GalleryStep({ settings, initialOpenPath }: GalleryProps)
 
   async function transcribeHere() {
     if (!openPath) return;
+    // Re-transcribing is billed again for the whole recording.
+    if (transcript && !window.confirm(t("gallery.confirmRetranscribe"))) return;
     setTranscribing(true);
     try {
       const r = await api.transcribe({
         filePath: openPath,
         accountId: settings.accountId,
         apiToken: settings.apiToken,
-        model: settings.sttModel,
+        model: sttModel,
         language: whisperLang(settings.language),
+        trimSilence: settings.trimSilence,
+        speed: settings.sttSpeed,
       });
       setTranscript(r.text);
       toast.success(t("transcribe.done", { n: r.chunks }));
@@ -149,6 +157,7 @@ export default function GalleryStep({ settings, initialOpenPath }: GalleryProps)
         model: settings.llmModel,
         language: settings.language,
         filePath: openPath,
+        kind: summaryKind,
       });
       setSummary(r.markdown);
       toast.success(t("resume.done"));
@@ -317,6 +326,11 @@ export default function GalleryStep({ settings, initialOpenPath }: GalleryProps)
                   </div>
                 </TabsContent>
                 <TabsContent value="transcript" className="space-y-2">
+                  <SttModelSelect
+                    value={sttModel}
+                    onChange={setSttModel}
+                    disabled={transcribing}
+                  />
                   {transcript && !loading && (
                     <div className="flex justify-end">
                       <Button
@@ -357,6 +371,19 @@ export default function GalleryStep({ settings, initialOpenPath }: GalleryProps)
                   )}
                 </TabsContent>
                 <TabsContent value="summary" className="space-y-2">
+                  <div className="flex gap-1">
+                    {(["meeting", "class"] as const).map((k) => (
+                      <Button
+                        key={k}
+                        size="sm"
+                        variant={summaryKind === k ? "default" : "outline"}
+                        disabled={summarizing}
+                        onClick={() => setSummaryKind(k)}
+                      >
+                        {t(k === "meeting" ? "resume.kindMeeting" : "resume.kindClass")}
+                      </Button>
+                    ))}
+                  </div>
                   {summary && !loading && (
                     <div className="flex justify-end">
                       <Button

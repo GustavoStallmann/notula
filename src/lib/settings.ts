@@ -18,7 +18,11 @@ export interface CloudSettings {
   sttModel: string;
   llmModel: string;
   language: string; // "" = auto, or e.g. "en", "fr"
+  trimSilence: boolean; // cut long pauses before STT (billed per minute)
+  sttSpeed: number; // 1 | 1.25 | 1.5 — speed-up applied before STT
 }
+
+export const WHISPER_STT_MODEL = "@cf/openai/whisper-large-v3-turbo";
 
 const KEY = "notula.settings.v1";
 
@@ -38,6 +42,8 @@ export function loadSettings(): CloudSettings {
             : migrateModel(storedStt),
         llmModel: migrateModel(p.llmModel || DEFAULT_LLM_MODEL),
         language: p.language ?? "",
+        trimSilence: p.trimSilence ?? true,
+        sttSpeed: p.sttSpeed ?? 1,
       };
     }
   } catch {
@@ -49,6 +55,8 @@ export function loadSettings(): CloudSettings {
     sttModel: DEFAULT_STT_MODEL,
     llmModel: DEFAULT_LLM_MODEL,
     language: "",
+    trimSilence: true,
+    sttSpeed: 1,
   };
 }
 

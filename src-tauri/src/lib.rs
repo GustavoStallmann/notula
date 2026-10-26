@@ -756,7 +756,10 @@ fn prepare_chunks(
     wav_path: &str,
     workdir: &std::path::Path,
     chunk_secs: u64,
+    audio_filter: Option<&str>,
 ) -> Result<Vec<PathBuf>, String> {
+    // Optional ffmpeg -af chain (silence trimming / speed-up) to cut billed minutes.
+    let af: Vec<&str> = audio_filter.map(|f| vec!["-af", f]).unwrap_or_default();
     let meta =
         std::fs::metadata(wav_path).map_err(|e| format!("audio file not found: {e}"))?;
     const SINGLE_LIMIT: u64 = 8 * 1024 * 1024;
@@ -770,6 +773,9 @@ fn prepare_chunks(
                 "error",
                 "-i",
                 wav_path,
+            ])
+            .args(&af)
+            .args([
                 "-c:a",
                 "pcm_s16le",
                 "-ar",
@@ -793,6 +799,9 @@ fn prepare_chunks(
             "error",
             "-i",
             wav_path,
+        ])
+        .args(&af)
+        .args([
             "-c:a",
             "pcm_s16le",
             "-ar",
@@ -836,6 +845,8 @@ async fn transcribe_audio(
     api_token: String,
     model: String,
     language: Option<String>,
+    trim_silence: Option<bool>,
+    speed: Option<f64>,
 ) -> Result<TranscribeResult, String> {
     if account_id.trim().is_empty() || api_token.trim().is_empty() {
         return Err("Cloudflare Account ID and API Token are required (see Settings)".into());
@@ -868,7 +879,21 @@ async fn transcribe_audio(
             .unwrap_or(0)
     ));
     std::fs::create_dir_all(&workdir).map_err(|e| format!("temp dir: {e}"))?;
-    let chunks = prepare_chunks(&file_path, &workdir, 180)?;
+    // STT is billed per audio minute: drop long pauses and optionally speed up.
+    let mut filters: Vec<String> = Vec::new();
+    if trim_silence.unwrap_or(false) {
+        filters.push(
+            "silenceremove=start_periods=1:start_threshold=-45dB:\
+             stop_periods=-1:stop_duration=1.5:stop_threshold=-45dB:stop_silence=0.3"
+                .to_string(),
+        );
+    }
+    let speed = speed.unwrap_or(1.0).clamp(1.0, 1.5);
+    if speed > 1.001 {
+        filters.push(format!("atempo={speed:.2}"));
+    }
+    let audio_filter = (!filters.is_empty()).then(|| filters.join(","));
+    let chunks = prepare_chunks(&file_path, &workdir, 180, audio_filter.as_deref())?;
     let total = chunks.len();
 
     let client = cf_client()?;
@@ -885,6 +910,9 @@ async fn transcribe_audio(
     let mut texts = Vec::new();
     let mut first_raw: Option<String> = None;
     let mut first_meta: Option<serde_json::Value> = None;
+    // Index of the Grok request variant that produced text; once known, later
+    // chunks use only it so a silent chunk is never re-billed with other variants.
+    let mut proven_variant: Option<usize> = None;
     for (i, chunk) in chunks.iter().enumerate() {
         let _ = app.emit(
             "transcribe-progress",
@@ -905,7 +933,10 @@ async fn transcribe_audio(
                 (false, true),
                 (false, false),
             ];
-            for (v_lang, v_diarize) in variants {
+            for (vi, (v_lang, v_diarize)) in variants.into_iter().enumerate() {
+                if proven_variant.is_some_and(|p| p != vi) {
+                    continue;
+                }
                 let mut input = serde_json::json!({
                     "file": format!("data:audio/wav;base64,{b64}"),
                 });
@@ -966,6 +997,7 @@ async fn transcribe_audio(
                     })
                     .unwrap_or_default();
                 if !got.trim().is_empty() {
+                    proven_variant = Some(vi);
                     break;
                 }
             }
@@ -1054,6 +1086,7 @@ async fn summarize_transcript(
     model: String,
     language: String,
     file_path: Option<String>,
+    kind: Option<String>,
 ) -> Result<SummarizeResult, String> {
     if transcript.trim().is_empty() {
         return Err("transcript is empty — transcribe audio first".into());
@@ -1078,8 +1111,39 @@ async fn summarize_transcript(
         language.trim().to_string()
     };
 
-    let (h_key, h_dec, h_act, h_sum, none_word) =
-        if language.to_lowercase().contains("portugu") {
+    let pt = language.to_lowercase().contains("portugu");
+    let system = if kind.as_deref() == Some("class") {
+        let (h_top, h_con, h_ex, h_hw, h_sum, none_word) = if pt {
+            (
+                "Tópicos abordados",
+                "Conceitos-chave",
+                "Exemplos e exercícios",
+                "Tarefas e próximos passos",
+                "Resumo",
+                "Nenhum",
+            )
+        } else {
+            (
+                "Topics covered",
+                "Key concepts",
+                "Examples and exercises",
+                "Homework and next steps",
+                "Summary",
+                "None",
+            )
+        };
+        format!(
+            "You are a precise study assistant. Analyze the class/lecture transcript and reply in {language} \
+             using Markdown with exactly these sections:\n\
+             ## {h_top}\n- Bullet list of the subjects taught, in the order they appeared (max 10).\n\
+             ## {h_con}\n- Bullet list of important concepts, definitions, formulas or rules explained, each with a short explanation.\n\
+             ## {h_ex}\n- Bullet list of examples, exercises or questions worked through (or '{none_word}' if there are none).\n\
+             ## {h_hw}\n- Bullet list of assignments, deadlines, exams or material to study (or '{none_word}' if there are none).\n\
+             ## {h_sum}\n- A concise paragraph summarizing the class (5-8 sentences).\n\
+             Be factual, do not invent concepts, dates, numbers or assignments that are not in the transcript."
+        )
+    } else {
+        let (h_key, h_dec, h_act, h_sum, none_word) = if pt {
             (
                 "Pontos-chave",
                 "Decisões",
@@ -1096,16 +1160,16 @@ async fn summarize_transcript(
                 "None",
             )
         };
-
-    let system = format!(
-        "You are a precise meeting assistant. Analyze the meeting transcript and reply in {language} \
-         using Markdown with exactly these sections:\n\
-         ## {h_key}\n- Bullet list of the most important points discussed (max 10).\n\
-         ## {h_dec}\n- Bullet list of decisions made (or '{none_word}' if there are none).\n\
-         ## {h_act}\n- Bullet list with owner if mentioned, otherwise 'Unassigned'.\n\
-         ## {h_sum}\n- A concise paragraph summarizing the meeting (5-8 sentences).\n\
-         Be factual, do not invent names, numbers or commitments that are not in the transcript."
-    );
+        format!(
+            "You are a precise meeting assistant. Analyze the meeting transcript and reply in {language} \
+             using Markdown with exactly these sections:\n\
+             ## {h_key}\n- Bullet list of the most important points discussed (max 10).\n\
+             ## {h_dec}\n- Bullet list of decisions made (or '{none_word}' if there are none).\n\
+             ## {h_act}\n- Bullet list with owner if mentioned, otherwise 'Unassigned'.\n\
+             ## {h_sum}\n- A concise paragraph summarizing the meeting (5-8 sentences).\n\
+             Be factual, do not invent names, numbers or commitments that are not in the transcript."
+        )
+    };
 
     let client = cf_client()?;
     let url = format!(
@@ -1116,8 +1180,10 @@ async fn summarize_transcript(
     let body = serde_json::json!({
         "messages": [
             { "role": "system", "content": system },
-            { "role": "user", "content": format!("Meeting transcript:\n\n{transcript}") }
-        ]
+            { "role": "user", "content": format!("{} transcript:\n\n{transcript}", if kind.as_deref() == Some("class") { "Class" } else { "Meeting" }) }
+        ],
+        // Workers AI defaults to a tiny output cap, which truncated the summary.
+        "max_tokens": 2048
     });
     let resp = client
         .post(&url)
@@ -1171,6 +1237,13 @@ fn get_platform() -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // WebKitGTK's accelerated compositing makes every CSS animation flicker on
+    // start (seen on Wayland + Intel). Respect an explicit user override.
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
+        // SAFETY: runs first thing in the process, before any thread is spawned.
+        unsafe { std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1") };
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(RecordingState(Mutex::new(None)))

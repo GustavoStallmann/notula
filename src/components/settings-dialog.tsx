@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SttModelSelect } from "@/components/stt-model-select";
 import { CloudSettings, saveSettings } from "@/lib/settings";
 import { useLang } from "@/lib/i18n";
 
@@ -90,12 +91,37 @@ export function SettingsDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="cf-stt">{t("settings.sttModel")}</Label>
-            <Input
+            <SttModelSelect
               id="cf-stt"
               value={settings.sttModel}
-              onChange={(e) => update({ sttModel: e.target.value })}
-              spellCheck={false}
+              onChange={(m) => update({ sttModel: m })}
             />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="cf-trim"
+              type="checkbox"
+              checked={settings.trimSilence}
+              onChange={(e) => update({ trimSilence: e.target.checked })}
+            />
+            <Label htmlFor="cf-trim">{t("settings.trimSilence")}</Label>
+          </div>
+          <div className="grid gap-2">
+            <Label>{t("settings.speed")}</Label>
+            <Select
+              value={String(settings.sttSpeed)}
+              onValueChange={(v) => update({ sttSpeed: Number(v) })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1×</SelectItem>
+                <SelectItem value="1.25">1.25×</SelectItem>
+                <SelectItem value="1.5">1.5×</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">{t("settings.speedHint")}</p>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="cf-llm">{t("settings.llmModel")}</Label>
